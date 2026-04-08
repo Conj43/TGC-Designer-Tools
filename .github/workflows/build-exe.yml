@@ -1,0 +1,94 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install numpy==1.26.0
+          pip install scipy==1.12.0
+          pip install opencv-python==4.10.0.84
+          pip install Pillow==11.0.0
+          pip install matplotlib==3.10.0
+          pip install imutils==0.5.2
+          pip install overpy==0.7
+          pip install pyproj==3.7.0
+          pip install requests==2.32.3
+          pip install scikit-image==0.25.0
+          pip install urllib3==2.3.0
+          pip install laspy[lazrs]
+          pip install PyWavelets
+          pip install pyinstaller
+
+      - name: Verify critical imports
+        run: |
+          python -c "import cv2; print('cv2 OK:', cv2.__version__)"
+          python -c "from skimage.segmentation import watershed; print('skimage watershed OK')"
+          python -c "from skimage.feature import peak_local_max; print('skimage peak_local_max OK')"
+          python -c "from skimage.color import label2rgb; print('skimage label2rgb OK')"
+          python -c "import pyproj; print('pyproj OK:', pyproj.__version__)"
+          python -c "import scipy.interpolate; print('scipy OK')"
+          python -c "import laspy; print('laspy OK:', laspy.__version__)"
+          python -c "import overpy; print('overpy OK')"
+          python -c "import pywt; print('pywt OK')"
+
+      - name: Build EXE
+        run: |
+          pyinstaller -F `
+            --add-binary="./laszip/laszip-cli.exe;laszip" `
+            --additional-hooks-dir="./PyInstaller/hooks/" `
+            --collect-all=cv2 `
+            --collect-all=skimage `
+            --collect-all=pyproj `
+            --collect-all=lazrs `
+            --collect-all=pywt `
+            --hidden-import=cv2 `
+            --hidden-import=numpy `
+            --hidden-import=scipy `
+            --hidden-import=scipy.interpolate `
+            --hidden-import=scipy.ndimage `
+            --hidden-import=scipy.spatial `
+            --hidden-import=PIL `
+            --hidden-import=matplotlib `
+            --hidden-import=matplotlib.pyplot `
+            --hidden-import=matplotlib.widgets `
+            --hidden-import=matplotlib.image `
+            --hidden-import=matplotlib.backends.backend_tkagg `
+            --hidden-import=skimage `
+            --hidden-import=skimage.segmentation `
+            --hidden-import=skimage.feature `
+            --hidden-import=skimage.color `
+            --hidden-import=skimage.morphology `
+            --hidden-import=overpy `
+            --hidden-import=pyproj `
+            --hidden-import=imutils `
+            --hidden-import=laspy `
+            --hidden-import=lazrs `
+            --hidden-import=pywt `
+            --hidden-import=pywt._extensions._cwt `
+            --hidden-import=tkinter `
+            --hidden-import=tkinter.filedialog `
+            --hidden-import=tkinter.scrolledtext `
+            --hidden-import=xml.etree.ElementTree `
+            tgc_gui.py
+
+      - name: Check EXE size
+        run: |
+          dir dist\tgc_gui.exe
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: tgc-designer-tools
+          path: dist/tgc_gui.exe
