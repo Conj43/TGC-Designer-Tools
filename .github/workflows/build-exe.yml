@@ -32,7 +32,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          pyinstaller -F --add-binary="./laszip/laszip-cli.exe;laszip" --additional-hooks-dir="./PyInstaller/hooks/" --hidden-import=cv2 --hidden-import=numpy --hidden-import=scipy --hidden-import=PIL --hidden-import=matplotlib --hidden-import=pyproj --hidden-import=overpy --hidden-import=skimage --hidden-import=imutils --hidden-import=laspy --collect-all=cv2 --collect-all=pyproj tgc_gui.py
+          pyinstaller -F --add-binary="./laszip/laszip-cli.exe;laszip" --additional-hooks-dir="./PyInstaller/hooks/" --hidden-import=cv2 --hidden-import=numpy --hidden-import=scipy --hidden-import=PIL --hidden-import=matplotlib --hidden-import=pyproj --hidden-import=overpy --hidden-import=skimage --hidden-import=skimage.segmentation --hidden-import=skimage.feature --hidden-import=skimage.color --hidden-import=skimage.morphology --hidden-import=imutils --hidden-import=laspy --collect-all=cv2 --collect-all=pyproj --collect-all=skimage tgc_gui.py
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
