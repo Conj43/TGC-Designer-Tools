@@ -1,0 +1,112 @@
+diff --git a/tgc_gui.py b/tgc_gui.py
+index d56fe63..3d30f2f 100644
+--- a/tgc_gui.py
++++ b/tgc_gui.py
+@@ -10,6 +10,7 @@ from functools import partial
+ import math
+ import numpy as np
+ import numpy
++import os
+ from PIL import Image, ImageTk
+ import string
+ 
+@@ -578,9 +579,17 @@ def generateCourseFromLidar(options_entries_dict, printf):
+ 
+     heightmap_dir_path = tk.filedialog.askdirectory(initialdir=root.filename, title="Select heightmap and mask files directory")
+     if heightmap_dir_path:
++        # Check if user provided a local OSM file to use instead of auto-fetching
++        osm_xml_data = None
++        osm_file_path = options_dict.get('osm_file_path', '')
++        if osm_file_path and os.path.isfile(osm_file_path):
++            with open(osm_file_path, encoding="utf8") as f:
++                osm_xml_data = f.read()
++                printf("Using local OSM file: " + str(osm_file_path))
++
+         drawPlaceholder()
+         course_json = tgc_image_terrain.generate_course(course_json, heightmap_dir_path, options_dict=options_dict, 
+-                printf=printf, course_version=course_version) 
++                printf=printf, course_version=course_version, osm_xml_data=osm_xml_data) 
+         if course_json is not None:
+             drawCourse(course_json)
+             printf("Done Rendering Course Preview")
+@@ -840,6 +849,18 @@ buildingCheck.select()
+ options_entries_dict["tree"] = tk.BooleanVar()
+ treeCheck = Checkbutton(osmSubFrame, text="Import Mapped Woods/Trees", variable=options_entries_dict["tree"], fg=check_fg, bg=check_bg)
+ treeCheck.deselect()
++
++# OSM file path for use with lidar import (avoids Overpass API)
++osm_file_var = tk.StringVar()
++options_entries_dict["osm_file_path"] = osm_file_var
++Label(osmSubFrame, text="OSM File (optional, for lidar)", fg=check_fg, bg=check_bg).grid(row=15, sticky=W, padx=5)
++osm_file_entry = tk.Entry(osmSubFrame, textvariable=osm_file_var, width=20, justify='left')
++def browseOSMFile():
++    f = tk.filedialog.askopenfilename(title='Select OSM file for lidar import', defaultextension='osm', filetypes=osm_types)
++    if f:
++        osm_file_var.set(f)
++osm_file_browse = Button(osmSubFrame, text="Browse", command=browseOSMFile)
++
+ osmbutton = Button(osmSubFrame, text="Make Flat Course From OSM File", command=partial(importOSMFile, options_entries_dict, coursePrintf))
+ 
+ osmew.grid(row=0, column=1, padx=5)
+@@ -858,7 +879,9 @@ Label(osmSubFrame, text="Match Hole Names", fg=check_fg, bg=check_bg).grid(row=1
+ osm_hole_filter.grid(row=12, column=1, padx=5)
+ buildingCheck.grid(row=13, columnspan=2, sticky=W, padx=5)
+ treeCheck.grid(row=14, columnspan=2, sticky=W, padx=5)
+-osmbutton.grid(row=15, columnspan=2)
++osm_file_entry.grid(row=15, column=1, padx=5)
++osm_file_browse.grid(row=16, columnspan=2, pady=2)
++osmbutton.grid(row=17, columnspan=2)
+ 
+ useOSMCheck.pack(padx=10, pady=10)
+ osmSubFrame.pack(padx=5, pady=5)
+diff --git a/tgc_image_terrain.py b/tgc_image_terrain.py
+index 3148140..a78d05b 100644
+--- a/tgc_image_terrain.py
++++ b/tgc_image_terrain.py
+@@ -3,6 +3,7 @@ import itertools
+ import json
+ import math
+ import numpy as np
++import overpy
+ from pathlib import Path
+ import random
+ import sys
+@@ -190,7 +191,7 @@ def set_constants(course_json, flatten_fairways=False, flatten_greens=False, cou
+ 
+     return course_json
+ 
+-def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=print, course_version=-1):
++def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=print, course_version=-1, osm_xml_data=None):
+     if course_version not in tgc_definitions.version_tags:
+         print("invalid version")
+         print(course_version)
+@@ -285,13 +286,22 @@ def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=pri
+         # Get spline configuration file, if present
+         spline_json = tgc_tools.get_spline_configuration_json(heightmap_dir_path)
+ 
+-        # Use this data to create playable courses automatically
+-        upper_left_enu = pc.ulENU()
+-        lower_right_enu = pc.lrENU()
+-        upper_left_latlon = pc.enuToLatLon(*upper_left_enu)
+-        lower_right_latlon = pc.enuToLatLon(*lower_right_enu)
+-        # Order is South, West, North, East
+-        result = OSMTGC.getOSMData(lower_right_latlon[0], upper_left_latlon[1], upper_left_latlon[0], lower_right_latlon[1], printf=printf)
++        result = None
++        if osm_xml_data is not None:
++            # Use locally provided OSM XML file with the lidar-derived GeoPointCloud
++            # This ensures coordinates align with the terrain
++            printf("Loading OpenStreetMap from local XML file")
++            op = overpy.Overpass()
++            result = op.parse_xml(osm_xml_data)
++        else:
++            # Use this data to create playable courses automatically
++            upper_left_enu = pc.ulENU()
++            lower_right_enu = pc.lrENU()
++            upper_left_latlon = pc.enuToLatLon(*upper_left_enu)
++            lower_right_latlon = pc.enuToLatLon(*lower_right_enu)
++            # Order is South, West, North, East
++            result = OSMTGC.getOSMData(lower_right_latlon[0], upper_left_latlon[1], upper_left_latlon[0], lower_right_latlon[1], printf=printf)
++
+         osm_trees = OSMTGC.addOSMToTGC(course_json, pc, result, x_offset=float(options_dict.get('adjust_ew', 0.0)), y_offset=float(options_dict.get('adjust_ns', 0.0)), \
+                                                          options_dict=options_dict, spline_configuration_json=spline_json, printf=printf, course_version=course_version)
+ 

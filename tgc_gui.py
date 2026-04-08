@@ -10,6 +10,7 @@ from functools import partial
 import math
 import numpy as np
 import numpy
+import os
 from PIL import Image, ImageTk
 import string
 
@@ -578,9 +579,17 @@ def generateCourseFromLidar(options_entries_dict, printf):
 
     heightmap_dir_path = tk.filedialog.askdirectory(initialdir=root.filename, title="Select heightmap and mask files directory")
     if heightmap_dir_path:
+        # Check if user provided a local OSM file to use instead of auto-fetching
+        osm_xml_data = None
+        osm_file_path = options_dict.get('osm_file_path', '')
+        if osm_file_path and os.path.isfile(osm_file_path):
+            with open(osm_file_path, encoding="utf8") as f:
+                osm_xml_data = f.read()
+                printf("Using local OSM file: " + str(osm_file_path))
+
         drawPlaceholder()
         course_json = tgc_image_terrain.generate_course(course_json, heightmap_dir_path, options_dict=options_dict, 
-                printf=printf, course_version=course_version) 
+                printf=printf, course_version=course_version, osm_xml_data=osm_xml_data) 
         if course_json is not None:
             drawCourse(course_json)
             printf("Done Rendering Course Preview")
@@ -840,6 +849,18 @@ buildingCheck.select()
 options_entries_dict["tree"] = tk.BooleanVar()
 treeCheck = Checkbutton(osmSubFrame, text="Import Mapped Woods/Trees", variable=options_entries_dict["tree"], fg=check_fg, bg=check_bg)
 treeCheck.deselect()
+
+# OSM file path for use with lidar import (avoids Overpass API)
+osm_file_var = tk.StringVar()
+options_entries_dict["osm_file_path"] = osm_file_var
+Label(osmSubFrame, text="OSM File (optional, for lidar)", fg=check_fg, bg=check_bg).grid(row=15, sticky=W, padx=5)
+osm_file_entry = tk.Entry(osmSubFrame, textvariable=osm_file_var, width=20, justify='left')
+def browseOSMFile():
+    f = tk.filedialog.askopenfilename(title='Select OSM file for lidar import', defaultextension='osm', filetypes=osm_types)
+    if f:
+        osm_file_var.set(f)
+osm_file_browse = Button(osmSubFrame, text="Browse", command=browseOSMFile)
+
 osmbutton = Button(osmSubFrame, text="Make Flat Course From OSM File", command=partial(importOSMFile, options_entries_dict, coursePrintf))
 
 osmew.grid(row=0, column=1, padx=5)
@@ -858,7 +879,9 @@ Label(osmSubFrame, text="Match Hole Names", fg=check_fg, bg=check_bg).grid(row=1
 osm_hole_filter.grid(row=12, column=1, padx=5)
 buildingCheck.grid(row=13, columnspan=2, sticky=W, padx=5)
 treeCheck.grid(row=14, columnspan=2, sticky=W, padx=5)
-osmbutton.grid(row=15, columnspan=2)
+osm_file_entry.grid(row=15, column=1, padx=5)
+osm_file_browse.grid(row=16, columnspan=2, pady=2)
+osmbutton.grid(row=17, columnspan=2)
 
 useOSMCheck.pack(padx=10, pady=10)
 osmSubFrame.pack(padx=5, pady=5)

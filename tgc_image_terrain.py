@@ -3,6 +3,7 @@ import itertools
 import json
 import math
 import numpy as np
+import overpy
 from pathlib import Path
 import random
 import sys
@@ -190,7 +191,7 @@ def set_constants(course_json, flatten_fairways=False, flatten_greens=False, cou
 
     return course_json
 
-def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=print, course_version=-1):
+def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=print, course_version=-1, osm_xml_data=None):
     if course_version not in tgc_definitions.version_tags:
         print("invalid version")
         print(course_version)
@@ -294,13 +295,22 @@ def generate_course(course_json, heightmap_dir_path, options_dict={}, printf=pri
         # Get spline configuration file, if present
         spline_json = tgc_tools.get_spline_configuration_json(heightmap_dir_path)
 
-        # Use this data to create playable courses automatically
-        upper_left_enu = pc.ulENU()
-        lower_right_enu = pc.lrENU()
-        upper_left_latlon = pc.enuToLatLon(*upper_left_enu)
-        lower_right_latlon = pc.enuToLatLon(*lower_right_enu)
-        # Order is South, West, North, East
-        result = OSMTGC.getOSMData(lower_right_latlon[0], upper_left_latlon[1], upper_left_latlon[0], lower_right_latlon[1], printf=printf)
+        result = None
+        if osm_xml_data is not None:
+            # Use locally provided OSM XML file with the lidar-derived GeoPointCloud
+            # This ensures coordinates align with the terrain
+            printf("Loading OpenStreetMap from local XML file")
+            op = overpy.Overpass()
+            result = op.parse_xml(osm_xml_data)
+        else:
+            # Use this data to create playable courses automatically
+            upper_left_enu = pc.ulENU()
+            lower_right_enu = pc.lrENU()
+            upper_left_latlon = pc.enuToLatLon(*upper_left_enu)
+            lower_right_latlon = pc.enuToLatLon(*lower_right_enu)
+            # Order is South, West, North, East
+            result = OSMTGC.getOSMData(lower_right_latlon[0], upper_left_latlon[1], upper_left_latlon[0], lower_right_latlon[1], printf=printf)
+
         osm_trees = OSMTGC.addOSMToTGC(course_json, pc, result, x_offset=float(options_dict.get('adjust_ew', 0.0)), y_offset=float(options_dict.get('adjust_ns', 0.0)), \
                                                          options_dict=options_dict, spline_configuration_json=spline_json, printf=printf, course_version=course_version)
 
